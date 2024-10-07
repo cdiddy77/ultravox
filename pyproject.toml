@@ -48,9 +48,17 @@ gpustat = "~1.1.1"
 types-requests = "~2.26.0"
 types-pyyaml = "^6.0.12.20240724"
 
+
+[tool.poetry.group.apisvc.dependencies]
+fastapi = "^0.114.2"
+uvicorn = "^0.30.6"
+structlog = "^24.4.0"
+python-dotenv = "^1.0.1"
+websockets = "<13"
+
 [build-system]
 requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+build-backend = "poetry.core.mason.api"
 
 [tool.mypy]
 python_version = "3.11"

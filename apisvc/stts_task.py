@@ -1,4 +1,4 @@
-from typing import Generator
+from typing import Dict, Generator, List
 import structlog
 import asyncio
 import websockets
@@ -85,6 +85,8 @@ async def text_to_speech_input_streaming(voice_id, text_iterator, queue: asyncio
         await websocket.send(json.dumps({"text": ""}))
 
         await listen_task
+        log.info("Finished streaming audio")
+        await queue.put("complete")
 
 
 async def process_audio(
@@ -108,11 +110,20 @@ async def process_audio(
     if not inference:
         raise ValueError("Inference object not initialized")
     # Perform inference
-    output = inference.infer_stream(
-        sample,
-        max_tokens=max_new_tokens,
-        temperature=temperature,
+    log.info(
+        "Starting inference",
+        past_messages=inference.past_messages,
     )
+    try:
+        output = inference.infer_stream(
+            sample,
+            max_tokens=max_new_tokens,
+            temperature=temperature,
+        )
+    except Exception as e:
+        log.error("Error during inference", error=str(e))
+        await queue.put("error")
+        return
 
     async def text_chunk_iterator():
         for chunk in output:
@@ -122,3 +133,10 @@ async def process_audio(
     await text_to_speech_input_streaming(
         SEER_MORGANA_VOICE_ID, text_chunk_iterator(), queue
     )
+
+
+async def update_conversation(messages: List[Dict[str, str]]):
+    inference = get_inference()
+    if not inference:
+        raise ValueError("Inference object not initialized")
+    inference.update_conversation(messages, None)

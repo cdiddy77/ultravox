@@ -5,16 +5,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import uvicorn
 import tempfile
-from apisvc.dtos import UploadAudioResponse
+from apisvc.dtos import ResetConversationResponse, UploadAudioResponse
 import structlog
 
-from apisvc.stts_task import (
-    process_audio,
-)
+from apisvc.stts_task import process_audio, update_conversation
 
 
 log: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+# processors = [
+#     structlog.contextvars.merge_contextvars,
+#     # structlog.processors.add_log_level,
+#     # structlog.dev.set_exc_info,
+#     structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False),
+# ]
+# structlog.configure(processors=processors)
 
 # args = simple_parsing.parse(Config)
 sse_queue = asyncio.Queue()
@@ -25,6 +30,8 @@ async def lifespan(app: FastAPI):
     # await setup_elevenlabs_websocket()
 
     yield
+
+    log.info("Shutting down")
     # await close_elevenlabs_websocket()
 
 
@@ -57,6 +64,8 @@ async def upload_audio(
         max_new_tokens=max_new_tokens,
         temperature=temperature,
     )
+    if "<|audio|>" not in prompt:
+        prompt = "<|audio|>" + prompt
     # Save the uploaded audio file to a temporary file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
         tmp.write(await audio.read())
@@ -66,6 +75,15 @@ async def upload_audio(
         process_audio, tmp_path, max_new_tokens, temperature, prompt, sse_queue
     )
     return UploadAudioResponse(status="processing")
+
+
+@app.post("/reset-conversation")
+async def reset_conversation(
+    background_tasks: BackgroundTasks,
+) -> ResetConversationResponse:
+    log.info("received reset conversation request")
+    background_tasks.add_task(update_conversation, [])
+    return ResetConversationResponse(status="processing")
 
 
 @app.get("/response-events")
@@ -80,6 +98,12 @@ async def sse_endpoint(request: Request):
 
             # Wait for new data in the queue
             data = await sse_queue.get()
+            if data == "complete":
+                yield "event: close\ndata: audio processing complete\n\n"
+                break
+            elif data == "error":
+                yield "event: error\ndata: audio processing error\n\n"
+                break
             # Send data as a server-sent event
             yield f"data: {data}\n\n"
 

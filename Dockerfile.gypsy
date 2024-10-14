@@ -1,0 +1,49 @@
+# Use the official Python image from the Docker Hub
+FROM python:3.12.5-slim
+
+# Install ffmpeg
+RUN apt-get update && apt-get install -y ffmpeg
+
+RUN apt-get update && \
+apt-get install -y zlib1g-dev
+
+# Install make, gcc, and libc-dev
+RUN apt-get update && apt-get install -y make gcc libc-dev
+
+# Clean up apt cache to reduce image size
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set the working directory
+WORKDIR /app
+
+# Install Poetry
+RUN python -m pip install --upgrade pip
+RUN pip install poetry==1.7.1
+
+# Copy the pyproject.toml and poetry.lock files to the working directory
+COPY pyproject.toml poetry.lock* /app/
+
+# Install dependencies
+RUN poetry install --no-root --with main,apisvc
+
+# Copy the rest of the project files
+COPY ./ultravox /app/ultravox
+COPY ./apisvc /app/apisvc
+COPY ./README.md /app/README.md
+
+# Create cache directories
+RUN mkdir -p /app/ungitable/model_cache
+RUN mkdir -p /app/ungitable/temp
+
+ENV TEMP_DIR=/app/ungitable/temp
+ENV MODEL_DIR=/app/ungitable/model_cache
+# ENV WHISPER_MODEL=medium
+# ENV TEMPERATURE=0.0
+# ENV THREADS=0
+# ENV PYTHONUNBUFFERED=1
+
+# Expose port 
+EXPOSE 7799
+
+# Command to run the application
+# CMD ["poetry", "run", "uvicorn", "apisvc.server:app", "--host", "0.0.0.0", "--port", "7799"]

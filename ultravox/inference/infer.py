@@ -141,10 +141,13 @@ class LocalInference(base.VoiceInference):
         )
 
         def thunk(f: futures.Future):
-            result = self._generate(
-                inputs, max_tokens, temperature, streamer, self.past_key_values
-            )
-            f.set_result(result)
+            try:
+                result = self._generate(
+                    inputs, max_tokens, temperature, streamer, self.past_key_values
+                )
+                f.set_result(result)
+            except Exception as e:
+                f.set_exception(e)
 
         future: futures.Future[transformers.GenerateDecoderOnlyOutput] = (
             futures.Future()

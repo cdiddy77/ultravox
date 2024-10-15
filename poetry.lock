@@ -1610,8 +1610,8 @@ torch = ["torch"]
 [package.source]
 type = "git"
 url = "https://github.com/fixie-ai/evals"
-reference = "HEAD"
-resolved_reference = "908a814c0881d99d4876d7000878ec0760a22311"
+reference = "0c66bf85df7a4b903ecb202b23c2a826b749fd71"
+resolved_reference = "0c66bf85df7a4b903ecb202b23c2a826b749fd71"
 
 [[package]]
 name = "evaluate"
@@ -5124,6 +5124,20 @@ pywin32 = {version = ">=226", markers = "platform_system == \"Windows\""}
 docs = ["sphinx (>=1.7.1)"]
 redis = ["redis"]
 tests = ["pytest (>=5.4.1)", "pytest-cov (>=2.8.1)", "pytest-mypy (>=0.8.0)", "pytest-timeout (>=2.1.0)", "redis", "sphinx (>=6.0.0)", "types-redis"]
+
+[[package]]
+name = "praatio"
+version = "6.2.0"
+description = "A library for working with praat, textgrids, time aligned audio transcripts, and audio files."
+optional = false
+python-versions = ">3.6.0"
+files = [
+    {file = "praatio-6.2.0-py3-none-any.whl", hash = "sha256:6541018791a3f0b087a8168d1746a165937c3fff1f94c7a6883b3f470e0cf405"},
+    {file = "praatio-6.2.0.tar.gz", hash = "sha256:7d2a7f8135a3e0691743ada0af84308b64e637f07038cea77d814b8aa2fa2e40"},
+]
+
+[package.dependencies]
+typing-extensions = "*"
 
 [[package]]
 name = "preshed"
@@ -8910,4 +8924,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4.0"
-content-hash = "bf37e82a2e5b98ca1fe84b66004090925e3eca92f2712ccf2320c20cb9e19087"
+content-hash = "28bcb0b7c03cca075f7e6907a97afe7048c4545755f489143caecfc88cb055d2"

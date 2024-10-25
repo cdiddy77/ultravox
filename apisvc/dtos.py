@@ -26,3 +26,8 @@ class UploadImageResponse(BaseModel):
 
 class TaskStatusResponse(BaseModel):
     status: ReadingTaskState
+
+
+class MessageRequest(BaseModel):
+    phone_number: str
+    message: str

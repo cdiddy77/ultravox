@@ -17,7 +17,9 @@ import openai
 import uvicorn
 import tempfile
 from apisvc.config import get_config
+from twilio.rest import Client
 from apisvc.dtos import (
+    MessageRequest,
     ResetConversationRequest,
     ResetConversationResponse,
     TaskStatusResponse,
@@ -282,6 +284,22 @@ async def get_task_status(task_id: str):
         )
 
     return TaskStatusResponse(status=task_state)
+
+
+@app.post("/send-message/")
+async def send_message(request: MessageRequest):
+    try:
+        client = Client(
+            get_config("TWILIO_ACCOUNT_SID"), get_config("TWILIO_AUTH_TOKEN")
+        )
+        message = client.messages.create(
+            body=request.message,
+            from_=get_config("TWILIO_PHONE_NUMBER"),
+            to=request.phone_number,
+        )
+        return {"status": "success", "sid": message.sid}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

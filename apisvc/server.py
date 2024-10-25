@@ -1,13 +1,38 @@
+import base64
 from contextlib import asynccontextmanager
 import asyncio
-from fastapi import FastAPI, File, Request, UploadFile, Form, BackgroundTasks
+import uuid
+from fastapi import (
+    FastAPI,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    Form,
+    BackgroundTasks,
+)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+import openai
 import uvicorn
 import tempfile
-from apisvc.dtos import ResetConversationResponse, UploadAudioResponse
+from apisvc.config import get_config
+from apisvc.dtos import (
+    ResetConversationRequest,
+    ResetConversationResponse,
+    TaskStatusResponse,
+    UploadAudioResponse,
+    UploadImageResponse,
+)
 import structlog
 
+from apisvc.reading import (
+    ReadingTaskState,
+    TarotCardHand,
+    get_reading_task_state,
+    process_tarot_cards,
+    set_reading_task_state,
+)
 from apisvc.stts_task import process_audio, update_conversation
 
 
@@ -79,10 +104,19 @@ async def upload_audio(
 
 @app.post("/reset-conversation")
 async def reset_conversation(
+    request: ResetConversationRequest,
     background_tasks: BackgroundTasks,
 ) -> ResetConversationResponse:
-    log.info("received reset conversation request")
-    background_tasks.add_task(update_conversation, [])
+    log.info("received reset conversation request", request=request)
+    background_tasks.add_task(
+        update_conversation,
+        [
+            {
+                "role": "system",
+                "content": request.system_message,
+            }
+        ],
+    )
     return ResetConversationResponse(status="processing")
 
 
@@ -109,6 +143,145 @@ async def sse_endpoint(request: Request):
 
     # Return a streaming response with content type as text/event-stream
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/upload-image/")
+async def upload_image(
+    background_tasks: BackgroundTasks,
+    image: UploadFile = File(...),
+    task_id: str = Form(""),
+):
+    # Save the uploaded image to a temporary file
+    # with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+    #     tmp.write(await image.read())
+    #     tmp_path = tmp.name
+
+    # def encode_image(image_path):
+    # with open(image_path, "rb") as image_file:
+    #     return base64.b64encode(image_file.read()).decode('utf-8')
+    encoded_image = base64.b64encode(image.file.read()).decode("utf-8")
+
+    client = openai.AsyncOpenAI(api_key=get_config("OPENAI_API_KEY"))
+
+    # Call OpenAI to determine whether there are any tarot cards in the image
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Analyze the image for tarot cards. Return all tarot cards found, or an empty list if there are none.",
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{encoded_image}"
+                            },
+                        },
+                    ],
+                }
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "tarot_cards",
+                    "schema": TarotCardHand.model_json_schema(),
+                },
+            },
+            max_tokens=300,
+        )
+    except Exception as e:
+        log.error("Error calling OpenAI", error=str(e))
+        raise HTTPException(status_code=500, detail="Error calling OpenAI")
+
+    hand: TarotCardHand = TarotCardHand.model_validate_json(
+        response.choices[0].message.content or "{}"
+    )
+
+    log.info("Received response from OpenAI", hand=hand)
+
+    # if the reading state is verifying, then we get the current state
+    # and see if they are the same, in which case it is verified.
+    if not hand or not hand.cards:
+        if task_id:
+            set_reading_task_state(
+                task_id,
+                ReadingTaskState(status="no_cards", task_id=task_id, hand=hand),
+            )
+        return UploadImageResponse(status="no_cards")
+    elif task_id:
+        current_state = get_reading_task_state(task_id)
+        if current_state and current_state.hand:
+            # create a set of the current hand names
+            # create a set of the new hand names
+            # if they are the same, then we are verified
+            current_hand_names = set(
+                [card.name for card in current_state.hand.cards if current_state.hand]
+            )
+            new_hand_names = set([card.name for card in hand.cards])
+            log.info(
+                "checking hand",
+                current_hand_names=current_hand_names,
+                new_hand_names=new_hand_names,
+            )
+            if current_hand_names == new_hand_names:
+                set_reading_task_state(
+                    task_id=task_id,
+                    state=ReadingTaskState(
+                        status="requesting_reading", task_id=task_id, hand=hand
+                    ),
+                )
+                background_tasks.add_task(func=process_tarot_cards, task_id=task_id)
+                return UploadImageResponse(status="requesting_reading", task_id=task_id)
+            else:
+                set_reading_task_state(
+                    task_id=task_id,
+                    state=ReadingTaskState(
+                        status="verifying_cards", task_id=task_id, hand=hand
+                    ),
+                )
+                return UploadImageResponse(status="verifying_cards", task_id=task_id)
+        else:
+            set_reading_task_state(
+                task_id=task_id,
+                state=ReadingTaskState(
+                    status="verifying_cards", task_id=task_id, hand=hand
+                ),
+            )
+            return UploadImageResponse(status="verifying_cards", task_id=task_id)
+    else:
+        # Create a unique task id
+        task_id = str(uuid.uuid4())
+
+        # Store the initial state of the task
+        set_reading_task_state(
+            task_id, ReadingTaskState(status="verifying_cards", hand=hand)
+        )
+
+        return UploadImageResponse(status="verifying_cards", task_id=task_id)
+
+    # # Create a background task to process the identified tarot cards
+    # background_tasks.add_task(process_tarot_cards, task_id, response["cards"])
+
+    # return JSONResponse(
+    #     status_code=200, content={"status": "verifying cards", "task_id": task_id}
+    # )
+
+
+@app.get("/task-status/{task_id}")
+async def get_task_status(task_id: str):
+    task_state = get_reading_task_state(task_id)
+    if not task_state:
+        return TaskStatusResponse(
+            status=ReadingTaskState(
+                status="error", error_message="Task not found", task_id=task_id
+            )
+        )
+
+    return TaskStatusResponse(status=task_state)
 
 
 if __name__ == "__main__":

@@ -113,6 +113,7 @@ async def process_audio(
     log.info(
         "Starting inference",
         past_messages=inference.past_messages,
+        conversation_mode=inference.conversation_mode,
     )
     try:
         output = inference.infer_stream(

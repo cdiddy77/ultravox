@@ -23,7 +23,7 @@ truecase = "~0.0.14"
 sentencepiece = "~0.2.0"
 protobuf = "~4.25.3"
 dataclasses-json = "~0.6.7"
-openai = "~1.33.0"
+openai = "~1.52.0"
 jiwer = "~3.0.4"
 tensorboardx = "~2.6.2.2"
 wandb = "~0.17.1"
@@ -55,6 +55,7 @@ uvicorn = "^0.30.6"
 structlog = "^24.4.0"
 python-dotenv = "^1.0.1"
 websockets = "<13"
+elevenlabs = "^1.10.0"
 
 [build-system]
 requires = ["poetry-core"]

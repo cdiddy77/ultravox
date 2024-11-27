@@ -22,6 +22,7 @@ from apisvc.dtos import (
     MessageRequest,
     ResetConversationRequest,
     ResetConversationResponse,
+    SpotCardsResponse,
     TaskStatusResponse,
     UploadAudioResponse,
     UploadImageResponse,
@@ -284,6 +285,88 @@ async def get_task_status(task_id: str):
         )
 
     return TaskStatusResponse(status=task_state)
+
+
+previous_hand: TarotCardHand = TarotCardHand(cards=[])
+
+
+@app.post("/spot-cards/")
+async def spot_cards(image: UploadFile = File(...)):
+    global previous_hand
+    # Save the uploaded image to a temporary file
+    # with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+    #     tmp.write(await image.read())
+    #     tmp_path = tmp.name
+
+    # def encode_image(image_path):
+    # with open(image_path, "rb") as image_file:
+    #     return base64.b64encode(image_file.read()).decode('utf-8')
+    encoded_image = base64.b64encode(image.file.read()).decode("utf-8")
+
+    client = openai.AsyncOpenAI(api_key=get_config("OPENAI_API_KEY"))
+
+    # Call OpenAI to determine whether there are any tarot cards in the image
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Analyze the image for tarot cards. Return all tarot cards found, or an empty list if there are none.",
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{encoded_image}"
+                            },
+                        },
+                    ],
+                }
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "tarot_cards",
+                    "schema": TarotCardHand.model_json_schema(),
+                },
+            },
+            max_tokens=300,
+        )
+    except Exception as e:
+        log.error("Error calling OpenAI", error=str(e))
+        raise HTTPException(status_code=500, detail="Error calling OpenAI")
+
+    hand: TarotCardHand = TarotCardHand.model_validate_json(
+        response.choices[0].message.content or "{}"
+    )
+
+    log.info("Received response from OpenAI", hand=hand)
+
+    # if there is a hand and there was a previous hand, then we can verify
+    # 1. it is the same as the current hand, then we are verified
+    # 2. it is not the same as the current hand, then we are not verified
+    # else, back to verifying
+    if hand and len(hand.cards) > 0:
+        if previous_hand and previous_hand.cards:
+            # create a set of the current hand names
+            # create a set of the new hand names
+            # if they are the same, then we are verified
+            current_hand_names = set(
+                [card.name for card in previous_hand.cards if previous_hand]
+            )
+            new_hand_names = set([card.name for card in hand.cards])
+            log.info(
+                "checking hand",
+                current_hand_names=current_hand_names,
+                new_hand_names=new_hand_names,
+            )
+            if current_hand_names == new_hand_names:
+                return SpotCardsResponse(hand=hand, hand_verified=True)
+    previous_hand = hand or {}
+    return SpotCardsResponse(hand=hand, hand_verified=False)
 
 
 @app.post("/send-message/")

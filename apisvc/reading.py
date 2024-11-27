@@ -28,6 +28,7 @@ ReadingStatus = Literal[
 class TarotCard(BaseModel):
     name: str = Field(..., description="The tarot card name.")
     description: str = Field(..., description="The description of the tarot card.")
+    arcana: Optional[str] = Field(..., description="The arcana of the tarot card.")
 
 
 class TarotCardHand(BaseModel):

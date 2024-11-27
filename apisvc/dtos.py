@@ -2,7 +2,7 @@ from typing import Generic, Literal, Optional, TypeVar
 
 from pydantic import BaseModel, Field
 
-from apisvc.reading import ReadingStatus, ReadingTaskState
+from apisvc.reading import ReadingStatus, ReadingTaskState, TarotCardHand
 
 
 class UploadAudioResponse(BaseModel):
@@ -22,6 +22,11 @@ class ResetConversationResponse(BaseModel):
 class UploadImageResponse(BaseModel):
     status: ReadingStatus
     task_id: Optional[str] = None
+
+
+class SpotCardsResponse(BaseModel):
+    hand: Optional[TarotCardHand] = None
+    hand_verified: bool
 
 
 class TaskStatusResponse(BaseModel):

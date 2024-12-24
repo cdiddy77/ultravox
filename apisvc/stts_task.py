@@ -48,7 +48,7 @@ async def text_to_speech_input_streaming(voice_id, text_iterator, queue: asyncio
     """Send text to ElevenLabs API and stream the returned audio."""
     uri = f"wss://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream-input?model_id=eleven_turbo_v2_5"
 
-    async with websockets.connect(uri) as websocket:
+    async with websockets.connect(uri) as websocket:  # type: ignore
         log.info("Connected to websocket")
         await websocket.send(
             json.dumps(
@@ -72,7 +72,7 @@ async def text_to_speech_input_streaming(voice_id, text_iterator, queue: asyncio
                         yield data["audio"]
                     elif data.get("isFinal"):
                         break
-                except websockets.exceptions.ConnectionClosed:
+                except websockets.exceptions.ConnectionClosed:  # type: ignore
                     log.info("Connection closed")
                     break
 
